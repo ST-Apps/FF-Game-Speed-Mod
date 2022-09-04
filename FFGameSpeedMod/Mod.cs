@@ -14,16 +14,29 @@ namespace FFGameSpeedMod
         private const string _timeScalesPropertyName = "timeScales";
 
         /// <summary>
-        /// Timescales to be either added or unlocked, alongside their respective <see cref="KeyCode"/> value.
+        /// Timescales to be either added or unlocked.
+        /// </summary>
+        private readonly float[] _customTimeScales = new float[]
+        {
+            5,  // Default but locked
+            10, // Default but locked
+            15, // Custom
+            20, // Custom
+            30, // Custom
+            50  // Custom
+        };
+
+        /// <summary>
+        /// <see cref="KeyCode"/> values relative to the time scales defined in <see cref="_customTimeScales"/>.
         /// Keys from 1 to 4 cover the default cases bundled with vanilla game.
         /// </summary>
-        private readonly Dictionary<KeyCode, float> _customTimeScales = new Dictionary<KeyCode, float> {
-            { KeyCode.Alpha5, 5 },  // Default but locked
-            { KeyCode.Alpha6, 10 }, // Default but locked
-            { KeyCode.Alpha7, 15 }, // Custom
-            { KeyCode.Alpha8, 20 }, // Custom
-            { KeyCode.Alpha9, 30 }, // Custom
-            { KeyCode.Alpha0, 50 }  // Custom
+        private readonly KeyCode[] _customTimeScalesKeyCodes = new KeyCode[] {
+            KeyCode.Alpha5, // Default but locked
+            KeyCode.Alpha6, // Default but locked
+            KeyCode.Alpha7, // Custom
+            KeyCode.Alpha8, // Custom
+            KeyCode.Alpha9, // Custom
+            KeyCode.Alpha0  // Custom
         };
 
         /// <summary>
@@ -36,25 +49,12 @@ namespace FFGameSpeedMod
         /// <summary>
         /// Reference to the <see cref="TimerManager"/> instance for the current game.
         /// </summary>
-        private TimeManager TimeManager => GameObject.Find("GameManager")?.GetComponent<GameManager>()?.timeManager;
+        private TimeManager TimeManager;
 
         /// <summary>
         /// Reference to the <see cref="TimeManager.timeScales"/> array which contains all the available multipliers.
         /// </summary>
-        private float[] TimeScales
-        {
-            get => (Il2CppStructArray<float>)TimeManager
-                .GetType()
-                .GetProperties()
-                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
-                .GetValue(TimeManager);
-
-            set => TimeManager
-                .GetType()
-                .GetProperties()
-                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
-                .SetValue(TimeManager, (Il2CppStructArray<float>)value);
-        }
+        private float[] TimeScales;
 
         /// <summary>
         /// Adds the custom time scales defined in <see cref="_customTimeScales"/>.
@@ -65,13 +65,38 @@ namespace FFGameSpeedMod
 
             LoggerInstance.Msg($"Setting up extended timescales...");
 
+            TimeManager = GameObject.Find("GameManager")?.GetComponent<GameManager>()?.timeManager;
             if (TimeManager == null)
             {
                 LoggerInstance.Msg("TimeManager is null, aborting...");
                 return;
             }
 
-            TimeScales = TimeScales.Union(_customTimeScales.Values).ToArray();
+            // Retrieve current values for time scales
+            TimeScales = (Il2CppStructArray<float>)TimeManager
+                .GetType()
+                .GetProperties()
+                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
+                .GetValue(TimeManager);
+
+            // Update the allowed time scales by adding custom ones
+            TimeManager
+                .GetType()
+                .GetProperties()
+                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
+                .SetValue(TimeManager, (Il2CppStructArray<float>)TimeScales.Union(_customTimeScales).ToArray());
+
+            // Update with the added scales for logging purposes
+            TimeScales = (Il2CppStructArray<float>)TimeManager
+                .GetType()
+                .GetProperties()
+                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
+                .GetValue(TimeManager);
+
+            LoggerInstance.Msg($"Updated available tims scales with following values: {string.Join(", ", TimeScales)}");
+
+            // Set this to true to prevent reloading everytime a button is pressed
+            // TODO: set this to false and destroy everything if we're back to main menu
             _isLoaded = true;
         }
 
@@ -81,9 +106,9 @@ namespace FFGameSpeedMod
         public override void OnUpdate()
         {
             // Check if any of the managed KeyCodes is being pressed
-            for (var i=0; i<_customTimeScales.Count; i++)
+            for (var i = 0; i < _customTimeScalesKeyCodes.Length; i++)
             {
-                var keyCode = _customTimeScales.Keys.ToArray()[i];
+                var keyCode = _customTimeScalesKeyCodes[i];
                 if (Input.GetKeyDown(keyCode))
                 {
                     // We need to init our custom time scales
