@@ -5,8 +5,8 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 // MelonLoader Metadata
-[assembly: MelonInfo(typeof(Mod), "GameSpeedMod", "0.0.1", "S_T")] //MelonInfo(typeof(ClassOfMod), "Game Mod Name", "Version", "Author")
-[assembly: MelonGame("Crate Entertainment", "Farthest Frontier")] //MelonGame("Studio", "Game")]
+[assembly: MelonInfo(typeof(Mod), "GameSpeedMod", "0.0.1-alpha", "S_T")]
+[assembly: MelonGame("Crate Entertainment", "Farthest Frontier")]
 
 // Le informazioni generali relative a un assembly sono controllate dal seguente 
 // set di attributi. Modificare i valori di questi attributi per modificare le informazioni
