@@ -1,5 +1,8 @@
-﻿using MelonLoader;
+﻿using HarmonyLib;
+using MelonLoader;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using UnhollowerBaseLib;
 using UnityEngine;
 using UnityEngine.UI;
@@ -8,28 +11,7 @@ namespace FFGameSpeedMod
 {
     public class Mod : MelonMod
     {
-        /// <summary>
-        /// Internal name for the <see cref="TimeManager.timeScales"/> property.
-        /// </summary>
-        private const string _timeScalesPropertyName = "timeScales";
-
-        /// <summary>
-        /// Internal name for the <see cref="TimeManager.highestVisibleTimeScaleIndex"/> property.
-        /// </summary>
-        private const string _highestVisibleTimeScaleIndex = "highestVisibleTimeScaleIndex";
-
-        /// <summary>
-        /// Timescales to be either added or unlocked.
-        /// </summary>
-        private readonly float[] _customTimeScales = new float[]
-        {
-            5,  // Default but locked
-            10, // Default but locked
-            15, // Custom
-            20, // Custom
-            30, // Custom
-            50  // Custom
-        };
+        #region Private Fields
 
         /// <summary>
         /// <see cref="KeyCode"/> values relative to the time scales defined in <see cref="_customTimeScales"/>.
@@ -45,16 +27,38 @@ namespace FFGameSpeedMod
         };
 
         /// <summary>
-        /// <see cref="Color"/> values relative to the time scales defined in <see cref="_customTimeScales"/>.
-        /// Keys from 1 to 4 cover the default cases bundled with vanilla game.
+        /// Methods to be patched in <see cref="TimeManager"/>.
         /// </summary>
-        private readonly Color[] _customTimeScalesColors = new Color[] {
-            Color.yellow,   // Default but locked
-            Color.yellow,   // Default but locked
-            Color.magenta,  // Custom
-            Color.magenta,  // Custom
-            Color.red,      // Custom
-            Color.red       // Custom
+        private readonly string[] _timeManagerPatchedMethods = new[]
+        {
+            nameof(TimeManager.SetTimeScale),
+            nameof(TimeManager.IncreaseTimeScale),
+            nameof(TimeManager.DecreaseTimeScale)
+        };
+
+        /// <summary>
+        /// Reference to the <see cref="TimeManager.timeScales"/> array which contains all the available multipliers.
+        /// </summary>
+        private float[] TimeScales;
+
+        #endregion
+
+        #region Static Fields
+
+        /// <summary>
+        /// Timescales to be either added or unlocked, alongside their relative <see cref="Color"/> value.
+        /// Keys from 1 to 4 cover the default cases bundled with vanilla game.
+        /// 
+        /// Palette generated at <see href="https://coolors.co/gradient-palette/ffea00-ff4d00?number=6">
+        /// </summary>
+        private static readonly SortedDictionary<float, Color> _customTimeScales = new SortedDictionary<float, Color>
+        {
+            { 5, new Color32(255, 234, 0, 255) },  // Default but locked
+            { 10, new Color32(255, 203, 0, 255) }, // Default but locked
+            { 15, new Color32(255, 171, 0, 255) }, // Custom
+            { 20, new Color32(255, 140, 0, 255) }, // Custom
+            { 30, new Color32(255, 108, 0, 255) }, // Custom
+            { 50, new Color32(255, 77, 0, 255) }   // Custom
         };
 
         /// <summary>
@@ -67,22 +71,22 @@ namespace FFGameSpeedMod
         /// <summary>
         /// Reference to the <see cref="TimerManager"/> instance for the current game.
         /// </summary>
-        private TimeManager TimeManager;
+        private static TimeManager TimeManager;
 
         /// <summary>
         /// Reference to the <see cref="Text"/> instance containing current game speed.
         /// </summary>
-        private Text TimeScaleText;
+        private static Text TimeScaleText;
 
         /// <summary>
         /// Reference to the default <see cref="Color"/> for the current <see cref="TimeScaleText"/>.
         /// </summary>
-        private Color TimeScaleColor;
+        private static Color TimeScaleColor;
 
-        /// <summary>
-        /// Reference to the <see cref="TimeManager.timeScales"/> array which contains all the available multipliers.
-        /// </summary>
-        private float[] TimeScales;
+        #endregion
+
+
+        #region Initializers
 
         /// <summary>
         /// Adds the custom time scales defined in <see cref="_customTimeScales"/>.
@@ -104,21 +108,21 @@ namespace FFGameSpeedMod
             TimeScales = (Il2CppStructArray<float>)TimeManager
                 .GetType()
                 .GetProperties()
-                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
+                .FirstOrDefault(p => p.Name == nameof(TimeManager.timeScales))
                 .GetValue(TimeManager);
 
             // Update the allowed time scales by adding custom ones
             TimeManager
                 .GetType()
                 .GetProperties()
-                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
-                .SetValue(TimeManager, (Il2CppStructArray<float>)TimeScales.Union(_customTimeScales).ToArray());
+                .FirstOrDefault(p => p.Name == nameof(TimeManager.timeScales))
+                .SetValue(TimeManager, (Il2CppStructArray<float>)TimeScales.Union(_customTimeScales.Keys).ToArray());
 
             // Update with the added scales for logging purposes
             TimeScales = (Il2CppStructArray<float>)TimeManager
                 .GetType()
                 .GetProperties()
-                .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
+                .FirstOrDefault(p => p.Name == nameof(TimeManager.timeScales))
                 .GetValue(TimeManager);
 
             // Setting this means that all the time scales are available
@@ -126,7 +130,7 @@ namespace FFGameSpeedMod
             TimeManager
                 .GetType()
                 .GetProperties()
-                .FirstOrDefault(p => p.Name == _highestVisibleTimeScaleIndex)
+                .FirstOrDefault(p => p.Name == nameof(TimeManager.highestVisibleTimeScaleIndex))
                 .SetValue(TimeManager, (uint)TimeScales.Length - 1);
 
             LoggerInstance.Msg($"Updated available tims scales with following values: {string.Join(", ", TimeScales)}");
@@ -139,10 +143,44 @@ namespace FFGameSpeedMod
                 TimeScaleColor = TimeScaleText.color;
             }
 
+            // Finally we can patch the SetTimeScale method
+            LoggerInstance.Msg($"Patching TimeManager methods...");
+            PatchTimeManager();
+            LoggerInstance.Msg($"Patched TimeManager methods");
+
             // Set this to true to prevent reloading everytime a button is pressed
             // TODO: set this to false and destroy everything if we're back to main menu
             _isLoaded = true;
         }
+
+        /// <summary>
+        /// Patches <see cref="TimeManager"/> methods to add our custom postfix <see cref="UpdateGameSpeedText"/>.
+        /// </summary>
+        private void PatchTimeManager()
+        {
+            // Find MethodInfo objects for all the methods that require patching
+            var patchedMethodInfos = _timeManagerPatchedMethods.Select(m =>
+                TimeManager
+                    .GetType()
+                    .GetMethod(m)
+                );
+
+            // Find the target postfix method for our patches
+            var timeManagerPostfixMethod = typeof(Mod).GetMethod(nameof(UpdateGameSpeedText), BindingFlags.Static | BindingFlags.NonPublic);
+            LoggerInstance.Msg($"Found postfix method for TimeManager: {timeManagerPostfixMethod}");
+
+            // Apply the patch to all the methods
+            foreach (var patchedMethodInfo in patchedMethodInfos)
+            {
+                LoggerInstance.Msg($"Patching method: {patchedMethodInfo.Name}");
+                // Prefix and finalizer have values, however the postfix does not.
+                HarmonyInstance.Patch(patchedMethodInfo, postfix: new HarmonyMethod(timeManagerPostfixMethod));
+            }
+        }
+
+        #endregion
+
+        #region Melon Mod
 
         /// <summary>
         /// Dynamically deal with custom time scales by setting the one associated to the pressed key.
@@ -164,18 +202,41 @@ namespace FFGameSpeedMod
                     var timeScaleIndex = i + 4;
                     LoggerInstance.Msg($"Setting time scale index to {timeScaleIndex} with value {TimeScales[timeScaleIndex]}");
 
-                    TimeManager.SetTimeScale((uint)timeScaleIndex, true);
+                    TimeManager.SetTimeScale((uint)timeScaleIndex);
                     LoggerInstance.Msg($"New value for time scale is {TimeManager.GetTimeScale()}");
-
-                    // Update text color also
-                    if (TimeScaleText != null)
-                    {
-                        // TODO: scale with yellow (first 2), orange (second 2), red (last 2) custom colors
-                        // Array di colori e si prende il colore in base al valore di i
-                        TimeScaleText.color = _customTimeScalesColors[i];
-                    }
                 }
             }
         }
+
+        #endregion
+
+        #region Harmony Patch
+
+        /// <summary>
+        /// This updates <see cref="TimeScaleText"/>'s color based on the selected time scale index.
+        /// Time scales included with the base game will retain their original color, custom ones will be mapped using <see cref="_customTimeScalesColors"/>.
+        /// </summary>
+        static void UpdateGameSpeedText()
+        {
+            if (TimeScaleText != null)
+            {
+                // We need to use reflection for this because otherwise the field is not there, and I'm too tired to understand why
+                // var timeScaleIndex = TimeManager.inde(uint) TimeManager.GetType().GetField(nameof(TimeManager.timeScaleIndex)).GetValue(TimeManager);
+
+                // This is the case for the time scales included with the base game
+                if (TimeManager.GetTimeScale() < _customTimeScales.Keys.First())
+                {
+                    TimeScaleText.color = TimeScaleColor;
+                    return;
+                }
+
+                // For custom ones we'll use the provided mapping
+                // Keep in mind that timeScaleIndex refers to an annray containing both the default and custom time scales.
+                // This means that the real index will be timeScaleIndex - 4
+                TimeScaleText.color = _customTimeScales[TimeManager.GetTimeScale()];
+            }
+        }
+
+        #endregion
     }
 }
