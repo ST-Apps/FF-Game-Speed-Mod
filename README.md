@@ -1,5 +1,7 @@
 # Farthest Frontier: Game Speed Mod
 
+![cover](Assets/cover.png)
+
 This mod that enables custom game speeds for the game [Farthest Frontier](https://store.steampowered.com/app/1044720/Farthest_Frontier/).
 
 - Mod version: **0.0.1-alpha**
