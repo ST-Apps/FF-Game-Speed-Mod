@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using UnhollowerBaseLib;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 namespace FFGameSpeedMod
@@ -48,6 +49,7 @@ namespace FFGameSpeedMod
         /// <summary>
         /// Timescales to be either added or unlocked, alongside their relative <see cref="Color"/> value.
         /// Keys from 1 to 4 cover the default cases bundled with vanilla game.
+        /// We use a <see cref="SortedDictionary{TKey, TValue}"/> to guarantte that our time scale values will always have the right order.
         /// 
         /// Palette generated at <see href="https://coolors.co/gradient-palette/ffea00-ff4d00?number=6">
         /// </summary>
@@ -84,7 +86,6 @@ namespace FFGameSpeedMod
         private static Color TimeScaleColor;
 
         #endregion
-
 
         #region Initializers
 
@@ -183,6 +184,31 @@ namespace FFGameSpeedMod
         #region Melon Mod
 
         /// <summary>
+        /// Resets mod status when returning back to main menu
+        /// </summary>
+        /// <param name="buildIndex"></param>
+        /// <param name="sceneName"></param>
+        public override void OnSceneWasUnloaded(int buildIndex, string sceneName)
+        {
+            if (sceneName == "Frontier")
+            {
+                // We're back to main menu so we must destroy everything we created here
+                TimeScales = null;
+                TimeManager = null;
+                TimeScaleText = null;
+                // Color is not nullable but it's not a big deal
+
+                // Clear harmony patches
+                HarmonyInstance.UnpatchSelf();
+
+                // Finally we can mark it as unloaded
+                _isLoaded = false;
+
+                LoggerInstance.Msg("Mod unloaded");
+            }
+        }
+
+        /// <summary>
         /// Dynamically deal with custom time scales by setting the one associated to the pressed key.
         /// </summary>
         public override void OnUpdate()
@@ -218,11 +244,11 @@ namespace FFGameSpeedMod
         /// </summary>
         static void UpdateGameSpeedText()
         {
+            // For some reasons TimeManager.timeScaleIndex field is not there, and I'm too tired to understand why.
+            // This means that we will use time scale values instead of using the index
+
             if (TimeScaleText != null)
             {
-                // We need to use reflection for this because otherwise the field is not there, and I'm too tired to understand why
-                // var timeScaleIndex = TimeManager.inde(uint) TimeManager.GetType().GetField(nameof(TimeManager.timeScaleIndex)).GetValue(TimeManager);
-
                 // This is the case for the time scales included with the base game
                 if (TimeManager.GetTimeScale() < _customTimeScales.Keys.First())
                 {
@@ -231,8 +257,6 @@ namespace FFGameSpeedMod
                 }
 
                 // For custom ones we'll use the provided mapping
-                // Keep in mind that timeScaleIndex refers to an annray containing both the default and custom time scales.
-                // This means that the real index will be timeScaleIndex - 4
                 TimeScaleText.color = _customTimeScales[TimeManager.GetTimeScale()];
             }
         }
