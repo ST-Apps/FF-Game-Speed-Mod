@@ -1,8 +1,8 @@
 ﻿using MelonLoader;
-using System.Collections.Generic;
 using System.Linq;
 using UnhollowerBaseLib;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace FFGameSpeedMod
 {
@@ -12,6 +12,11 @@ namespace FFGameSpeedMod
         /// Internal name for the <see cref="TimeManager.timeScales"/> property.
         /// </summary>
         private const string _timeScalesPropertyName = "timeScales";
+
+        /// <summary>
+        /// Internal name for the <see cref="TimeManager.highestVisibleTimeScaleIndex"/> property.
+        /// </summary>
+        private const string _highestVisibleTimeScaleIndex = "highestVisibleTimeScaleIndex";
 
         /// <summary>
         /// Timescales to be either added or unlocked.
@@ -40,6 +45,19 @@ namespace FFGameSpeedMod
         };
 
         /// <summary>
+        /// <see cref="Color"/> values relative to the time scales defined in <see cref="_customTimeScales"/>.
+        /// Keys from 1 to 4 cover the default cases bundled with vanilla game.
+        /// </summary>
+        private readonly Color[] _customTimeScalesColors = new Color[] {
+            Color.yellow,   // Default but locked
+            Color.yellow,   // Default but locked
+            Color.magenta,  // Custom
+            Color.magenta,  // Custom
+            Color.red,      // Custom
+            Color.red       // Custom
+        };
+
+        /// <summary>
         /// Prevent reloading custom time scales multiple times.
         /// 
         /// TODO: Find a way to run <see cref="InitTimeScales"/> only on game load using <see cref="MelonLoader"/>.
@@ -50,6 +68,16 @@ namespace FFGameSpeedMod
         /// Reference to the <see cref="TimerManager"/> instance for the current game.
         /// </summary>
         private TimeManager TimeManager;
+
+        /// <summary>
+        /// Reference to the <see cref="Text"/> instance containing current game speed.
+        /// </summary>
+        private Text TimeScaleText;
+
+        /// <summary>
+        /// Reference to the default <see cref="Color"/> for the current <see cref="TimeScaleText"/>.
+        /// </summary>
+        private Color TimeScaleColor;
 
         /// <summary>
         /// Reference to the <see cref="TimeManager.timeScales"/> array which contains all the available multipliers.
@@ -65,7 +93,7 @@ namespace FFGameSpeedMod
 
             LoggerInstance.Msg($"Setting up extended timescales...");
 
-            TimeManager = GameObject.Find("GameManager")?.GetComponent<GameManager>()?.timeManager;
+            TimeManager = UnitySingleton<GameManager>.Instance?.timeManager;
             if (TimeManager == null)
             {
                 LoggerInstance.Msg("TimeManager is null, aborting...");
@@ -93,7 +121,23 @@ namespace FFGameSpeedMod
                 .FirstOrDefault(p => p.Name == _timeScalesPropertyName)
                 .GetValue(TimeManager);
 
+            // Setting this means that all the time scales are available
+            // This defaults to 3, which sets up to 4 different speeds
+            TimeManager
+                .GetType()
+                .GetProperties()
+                .FirstOrDefault(p => p.Name == _highestVisibleTimeScaleIndex)
+                .SetValue(TimeManager, (uint)TimeScales.Length - 1);
+
             LoggerInstance.Msg($"Updated available tims scales with following values: {string.Join(", ", TimeScales)}");
+
+            // Retrieve the UI references
+            var gameSpeedText = GameObject.Find("Game Speed Text");
+            if (gameSpeedText != null)
+            {
+                TimeScaleText = gameSpeedText.GetComponent<Text>();
+                TimeScaleColor = TimeScaleText.color;
+            }
 
             // Set this to true to prevent reloading everytime a button is pressed
             // TODO: set this to false and destroy everything if we're back to main menu
@@ -122,6 +166,14 @@ namespace FFGameSpeedMod
 
                     TimeManager.SetTimeScale((uint)timeScaleIndex, true);
                     LoggerInstance.Msg($"New value for time scale is {TimeManager.GetTimeScale()}");
+
+                    // Update text color also
+                    if (TimeScaleText != null)
+                    {
+                        // TODO: scale with yellow (first 2), orange (second 2), red (last 2) custom colors
+                        // Array di colori e si prende il colore in base al valore di i
+                        TimeScaleText.color = _customTimeScalesColors[i];
+                    }
                 }
             }
         }
